@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>חישוב הלוח העברי והמולד</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#1d2433;--mut:#5b6578;--acc:#1f4fa3;--line:#d8deea}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",Arial,"Noto Sans Hebrew",sans-serif;line-height:1.5}
+main{max-width:980px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:8px 0 2px}
+.sub{color:var(--mut);margin:0 0 14px;font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.row a{color:var(--acc)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+label{display:block;font-weight:600;font-size:.9rem;margin-bottom:4px}
+input{font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;width:150px;direction:ltr;text-align:center}
+button{font:inherit;padding:10px 14px;border-radius:8px;border:1px solid var(--acc);background:#fff;color:var(--acc);cursor:pointer}
+button.main{background:var(--acc);color:#fff;font-weight:600}
+button.gray{border-color:var(--line);color:var(--mut)}
+button:disabled{opacity:.45;cursor:default}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.cell{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:#fafbfe}
+.cell b{display:block;font-size:.8rem;color:var(--mut);font-weight:600}
+.cell span{font-size:1.1rem;font-weight:700;min-height:1.6em;display:block}
+#log{height:340px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;font-size:.95rem}
+#log div{padding:1px 0;white-space:pre-wrap}
+.blue{color:#1f4fa3}.black{color:#111}.green{color:#1c7a2f}.red{color:#c0262d}
+.sect{font-weight:700;margin:4px 0 8px;color:var(--acc)}.sect.ben{color:#1c7a2f}.gap{height:14px}
+.note{font-size:.8rem;color:var(--mut)}
+@media(max-width:520px){input{width:120px}button{flex:1 1 45%}}
+</style>
+</head>
+<body>
+<main>
+<h1>חישוב הלוח העברי והמולד</h1>
+<p class="sub">מולד ראש השנה, דחיות, אורך השנה וכל מולדות השנה</p>
+<div class="card">
+ <div class="row">
+  <div><label for="year">שנה לחישוב (1 - 5999)</label><input id="year" type="number" inputmode="numeric" min="1" max="5999" value="5787"></div>
+  <button class="main" id="bCal">חשב לוח שנה</button>
+ </div>
+ <div class="row" style="margin-top:10px"><label style="font-weight:400;display:flex;gap:8px;align-items:center;margin:0"><input type="checkbox" id="ben" style="width:auto"> שיטת בן מאיר (מולד זקן רק מעל 18 שעות ו-642 חלקים; גט"ר ד" מ-9 שעות ו-846 חלקים; ב"ט תקפ"ט מ-16 שעות ו-151 חלקים)</label> <a href="ben-meir.html" style="font-size:.85rem;margin-inline-start:10px">הסבר על שיטת בן מאיר</a> <a href="https://www.daat.ac.il/daat/shabat/luach/matay-2.htm" target="_blank" rel="noopener" style="font-size:.85rem;margin-inline-start:10px">מאמר מקצועי (רחמים שר-שלום)</a></div>
+ <div class="row" style="margin-top:10px">
+  <button id="bMolad">חשב מולד ראש השנה</button>
+  <button id="bAll">חשב את כל המולדות</button>
+  <button id="bDel">חשב ימי ראש השנה</button>
+  <button class="gray" id="bClr">נקה הכל</button>
+ </div>
+</div>
+<div class="card" id="res"></div>
+<div class="card"><label>הודעות</label><div id="log" aria-live="polite"></div>
+<p class="note">החישוב מתבצע במכשיר שלך בלבד. ימי השבוע הם של ראש השנה, פסח וכו' בלוח הקבוע.</p></div>
+</main>
+<script>
+// ליבת החישוב - העתק נאמן של CMoladAppDlg (CalculateNewYearMolad / CalculateDelays / CalculateAllMoladot / OnBnClickedCalculate)
+var DAYS=["שבת","ראשון","שני","שלישי","רביעי","חמישי","ששי","שבת"];
+var YESNO=["לא","כן"];
+var YEARTYPE=["חסרה","כסידרה","שלמה"];
+var MONTHS=["תשרי","מרחשוון","כסלו","טבת","שבט","אדר","ניסן","אייר","סיוון","תמוז","אב","אלול"];
+var LEAPMONTHS=["תשרי","מרחשוון","כסלו","טבת","שבט","אדר א","אדר ב","ניסן","אייר","סיוון","תמוז","אב","אלול"];
+function mod(a,b){return ((a%b)+b)%b;}
+function newYearMolad(year,log){
+  var y=year-1, months=y*12, cycles=Math.floor(y/19);
+  months+=cycles*7;
+  var r=mod(y,19), add;
+  if(r<=2)add=0;else if(r<=5)add=1;else if(r<=7)add=2;else if(r<=10)add=3;else if(r<=13)add=4;else if(r<=16)add=5;else add=6;
+  months+=add;
+  if(log){
+    log("מחזור קטן מספר: "+cycles+" +  "+(r+1)+" שנים נוספות","blue");
+    log("סך הכל חודשים: "+months+";","blue");
+  }
+  var d=months+2, h=months*12+5, p=months*793+204;
+  h+=Math.floor(p/1080); p=p%1080;
+  d+=Math.floor(h/24); h=h%24; d=mod(d,7);
+  var leap=[0,3,6,8,11,14,17].indexOf(mod(y+1,19))>=0;
+  return {day:d,hours:h,parts:p,leap:leap};
+}
+function delays(thisLeap,day,hours,parts,prevLeap,year,log,ben){
+  log=log||function(){};
+  var nd=day, T=hours*1080+parts;
+  var classicZaken=(hours>=18);
+  var zaken=ben?(hours>18||(hours==18&&parts>642)):classicZaken;
+  var classicGat=(!thisLeap&&day==3&&(hours>9||(hours==9&&parts>=204)));
+  var classicBtu=(prevLeap&&day==2&&(hours>15||(hours==15&&parts>=589)));
+  var gat=ben?(!thisLeap&&day==3&&T>=9*1080+846):classicGat;
+  var btu=ben?(prevLeap&&day==2&&T>=16*1080+151):classicBtu;
+  var tag=ben?"[שיטת בן מאיר] ":"";
+  if(ben&&classicZaken&&!zaken&&!gat&&!btu){log("שנה "+year+": [שיטת בן מאיר] מולד זקן לא מתקיים - המולד "+hours+" שעות, "+parts+" חלקים אינו גדול מ-18 שעות ו-642 חלקים (בשיטה הרגילה הייתה כאן דחייה שנייה)","green");}
+  else if(ben&&classicZaken&&!zaken){log("שנה "+year+": [שיטת בן מאיר] מולד זקן לא מתקיים (המולד "+hours+" שעות, "+parts+" חלקים אינו גדול מ-18 שעות ו-642 חלקים), אך תנאי דחייה אחר מתקיים כמפורט להלן","green");}
+  if(zaken){log("שנה "+year+": דחייה שנייה (מולד זקן) - שעות "+hours+(ben?" ו-"+parts+" חלקים > 18 שעות ו-642 חלקים":" >= 18"),"red");nd++;}
+  else if(gat){log("שנה "+year+": דחייה שלישית (גט\"ר ד\") - שנה פשוטה, יום "+day+", "+hours+" שעות, "+parts+" חלקים "+(ben?">= 3,9,846 [בשיטה הרגילה 3,9,204]":">= 3,9,204"),"red");nd++;}
+  else if(btu){log("שנה "+year+": דחייה רביעית (ב\"ט תקפ\"ט) - אחרי שנה מעוברת, יום "+DAYS[nd]+", "+hours+" שעות, "+parts+" חלקים "+(ben?">= 2,16,151 [בשיטה הרגילה 2,15,589]":">= 2,15,589"),"red");nd++;}
+  if(ben&&!zaken&&!gat&&!btu&&(classicGat||classicBtu)){log("שנה "+year+": [שיטת בן מאיר] "+(classicGat?"דחיית גט\"ר ד\"":"דחיית ב\"ט תקפ\"ט")+" לא מתקיימת בסף המוזז (בשיטה הרגילה הייתה כאן דחייה)","green");}
+  if(nd==1||nd==4||nd==6){log("שנה "+year+": דחייה ראשונה (לא אד\"ו ראש) - היום המקורי "+DAYS[nd]+" - ראשון/רביעי/שישי","red");nd++;}
+  return nd;
+}
+function moladDay(d,h){return (h<12?"ליל ":"יום ")+DAYS[d];}
+function allMoladot(m,log){
+  var n=m.leap?13:12, names=m.leap?LEAPMONTHS:MONTHS, out=[];
+  for(var i=0;i<n;i++){
+    var d=m.day+i, h=m.hours+12*i, p=m.parts+793*i;
+    h+=Math.floor(p/1080); p=p%1080;
+    d+=Math.floor(h/24); h=h%24; d=d%7;
+    out.push({name:names[i],day:d,hours:h,parts:p});
+    if(log)log("מולד חודש "+names[i]+": "+moladDay(d,h)+", "+h+" שעות, "+p+" חלקים ( "+Math.floor(p/18)+" דקות ו"+(p%18)+" חלקים )","black");
+  }
+  return out;
+}
+function calcCore(year,log,ben){
+  var m=newYearMolad(year,log);
+  var prev=newYearMolad(year-1), next=newYearMolad(year+1);
+  var ny=delays(m.leap,m.day,m.hours,m.parts,prev.leap,year,log,ben);
+  var nny=delays(next.leap,next.day,next.hours,next.parts,m.leap,year+1,log,ben);
+  var c=(nny<=ny)?nny+7:nny, yt, pesach;
+  if(!m.leap){yt=(c-ny)-3;pesach=(ny+1+yt)%7;}
+  else{yt=(c-ny)-5;pesach=(ny+3+yt)%7;}
+  return {molad:m,leap:m.leap,newYear:ny,nextNewYear:nny,yearType:yt,pesach:pesach,
+    heshvan:(yt<2)?29:30,kislev:yt?30:29,length:c-ny,
+    realLength:(m.leap?383:353)+yt,invalid:(yt<0||yt>2)};
+}
+function calc(year,log,ben){
+  var r=calcCore(year,log,ben);
+  if(ben){
+    if(r.invalid&&log)log("[שיטת בן מאיר] אזהרה: בשנה "+year+" ההפרש בין ראש השנה לראש השנה הבאה נותן אורך שנה של "+r.realLength+" ימים, שאינו אורך חוקי (353/354/355/383/384/385). שינוי תנאי מולד זקן לבדו אינו מספיק כאן ונדרשת הבהרה של הכלל","red");
+    var k=calcCore(year,null,false);
+    r.classic=k;
+    r.differs=(k.newYear%7!=r.newYear%7)||(k.nextNewYear%7!=r.nextNewYear%7)||k.yearType!=r.yearType;
+    if(log){
+      if(r.differs){
+        log("[שיטת בן מאיר] הבדל מהשיטה הרגילה בשנה "+year+": ראש השנה ביום "+DAYS[r.newYear]+" (רגילה: "+DAYS[k.newYear]+"), ראש השנה הבאה ביום "+DAYS[r.nextNewYear]+" (רגילה: "+DAYS[k.nextNewYear]+"), סוג השנה "+(r.invalid?"לא תקין ("+r.realLength+" ימים)":YEARTYPE[r.yearType])+" (רגילה: "+YEARTYPE[k.yearType]+"), פסח ביום "+DAYS[r.pesach]+" (רגילה: "+DAYS[k.pesach]+")","green");
+      } else log("[שיטת בן מאיר] אין הבדל מהשיטה הרגילה בשנה "+year+" (ראש השנה, ראש השנה הבאה וסוג השנה זהים)","green");
+    }
+  }
+  return r;
+}
+var $=function(i){return document.getElementById(i)};
+var logEl=$("log");
+function log(t,c){var d=document.createElement("div");d.className=c||"black";d.textContent=t.replace(/\d[\d,\s>=]*\d/g,function(m){return "\u2066"+m+"\u2069";});logEl.appendChild(d);logEl.scrollTop=logEl.scrollHeight;}
+function BEN(){return $("ben").checked;}
+function resetAll(){
+  logEl.textContent="";
+  renderRes([{o:cardsFor()}]);
+}
+function getYear(){
+  resetAll();
+  var y=parseInt($("year").value,10);
+  if(isNaN(y)||y<1||y>5999){log("שנה לא תקינה: "+(isNaN(y)?$("year").value:y)+" !!! נסה שוב (1 - 5999)","blue");return null;}
+  return y;
+}
+function showMolad(y){
+  var m=newYearMolad(y,log);
+  log("מולד ראש השנה לשנת "+y,"black");
+  log(moladDay(m.day,m.hours)+", "+m.hours+" שעות, "+m.parts+" חלקים  ( "+Math.floor(m.parts/18)+" דקות ו"+(m.parts%18)+" חלקים )","black");
+  log("האם שנת "+y+" מעוברת? "+YESNO[+m.leap],"blue");
+  return m;
+}
+var FIELDS=[["שנה","y"],["ראש השנה","rh"],["ראש השנה הבאה","next"],["חשוון","hesh"],["כסלו","kis"],["שנה מעוברת?","leap"],["פסח","pes"],["סוג השנה","type"]];
+function cardsFor(y,r){
+  if(!r)return {y:"",rh:"",next:"",hesh:"",kis:"",leap:"",pes:"",type:""};
+  var o={y:y,rh:DAYS[r.newYear],next:DAYS[r.nextNewYear],leap:YESNO[+r.leap],pes:DAYS[r.pesach]};
+  if(r.invalid){o.hesh="-";o.kis="-";o.type="לא תקין ("+r.realLength+" ימים)";}
+  else{o.hesh=r.heshvan+" ימים";o.kis=r.kislev+" ימים";o.type=YEARTYPE[r.yearType];}
+  return o;
+}
+function gridHtml(o){
+  var s='<div class="grid">';
+  FIELDS.forEach(function(f){s+='<div class="cell"><b>'+f[0]+'</b><span>'+o[f[1]]+'</span></div>';});
+  return s+'</div>';
+}
+function renderRes(blocks){
+  var s="";
+  blocks.forEach(function(b,i){
+    if(i)s+='<div class="gap"></div>';
+    if(b.title)s+='<div class="sect '+(b.cls||"")+'">'+b.title+'</div>';
+    s+=gridHtml(b.o);
+  });
+  $("res").innerHTML=s;
+}
+function same(r,k){
+  return r.newYear%7==k.newYear%7&&r.nextNewYear%7==k.nextNewYear%7&&r.yearType==k.yearType&&r.pesach==k.pesach&&r.invalid==k.invalid;
+}
+function fill(y,r){
+  if(r.classic&&!same(r,r.classic)){
+    renderRes([{title:"שיטה רגילה",o:cardsFor(y,r.classic)},{title:"שיטת בן מאיר",cls:"ben",o:cardsFor(y,r)}]);
+  } else if(r.classic){
+    renderRes([{title:"שתי השיטות נותנות תוצאה זהה",o:cardsFor(y,r)}]);
+  } else renderRes([{o:cardsFor(y,r)}]);
+}
+function summary(r){
+  if(r.invalid){log("ראש השנה יהיה ביום "+DAYS[r.newYear]+";\nראש השנה הבאה יהיה ביום "+DAYS[r.nextNewYear]+";\nאורך השנה שיוצא בשיטה זו: "+r.realLength+" ימים - אינו אורך חוקי, ולכן סוג השנה, חשוון, כסלו ופסח אינם מוצגים כתוצאה אמינה","red");return;}
+  log("ראש השנה יהיה ביום "+DAYS[r.newYear]+",\nפסח יהיה ביום "+DAYS[r.pesach]+";\nראש השנה הבאה יהיה ביום "+DAYS[r.nextNewYear]+";\nהשנה היא "+YEARTYPE[r.yearType],"blue");
+}
+function finish(y,r){
+  if(r.classic&&!same(r,r.classic)){
+    log("=== תוצאת השיטה הרגילה לשנה "+y+" (להשוואה) ===","black");
+    calcCore(y,function(t,c){if(!/^(מחזור קטן|סך הכל חודשים)/.test(t))log(t,c);},false);
+    summary(r.classic);
+    log("=== תוצאת שיטת בן מאיר לשנה "+y+" ===","green");
+    summary(r);
+  } else summary(r);
+}
+$("bCal").onclick=function(){
+  var y=getYear();if(y===null)return;
+  var m=showMolad(y);
+  var r=calc(y,log,BEN());
+  allMoladot(m,log);
+  finish(y,r);fill(y,r);
+};
+$("bMolad").onclick=function(){var y=getYear();if(y===null)return;showMolad(y);};
+$("bAll").onclick=function(){var y=getYear();if(y===null)return;allMoladot(newYearMolad(y),log);};
+$("bDel").onclick=function(){var y=getYear();if(y===null)return;var r=calc(y,log,BEN());finish(y,r);fill(y,r);};
+$("ben").onchange=function(){resetAll();log(BEN()?"נבחרה שיטת בן מאיר (מולד זקן רק אם המולד גדול מ-18 שעות ו-642 חלקים; גט\"ר ד\" מ-9 שעות ו-846 חלקים; ב\"ט תקפ\"ט מ-16 שעות ו-151 חלקים). ההבדלים מהשיטה הרגילה יסומנו בירוק בתוך החישוב.":"נבחרה השיטה הרגילה (מולד זקן מ-18 שעות ומעלה).","blue");};
+$("bClr").onclick=function(){logEl.textContent="";};
+$("year").addEventListener("keydown",function(e){if(e.key==="Enter")$("bCal").click();});
+log("ברוכים הבאים ליישומון חישוב הלוח העברי","blue");
+log("נכתב על ידי שלמה הכט","blue");
+log("=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=","green");
+</script></body></html>
